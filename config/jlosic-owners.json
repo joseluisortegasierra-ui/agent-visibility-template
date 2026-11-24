@@ -1,0 +1,21 @@
+{
+  "schema": "jlosic-owner-config/1.0",
+  "version": "2026-11-24.1",
+  "owners": [
+    {"key":"academia","capabilities":["academic-research","document-study","accessibility","a2a-collaboration"],"cadenceHours":6,"publicDescription":"Estudio documental altruista, formación y accesibilidad con fuentes auténticas y sin compromisos personales del titular."},
+    {"key":"biblioteca","capabilities":["evidence-library","chronology","deduplication","provenance-graph"],"cadenceHours":6,"publicDescription":"Biblioteca probatoria INSS: cronología, genealogía, duplicados, contradicciones, huecos y referencias exactas."},
+    {"key":"clinica","capabilities":["clinical-record-reconciliation","continuity","provenance","gap-detection"],"cadenceHours":6,"publicDescription":"Reconciliación longitudinal de historia clínica, lagunas, versiones, custodia e informes originales para profesionales competentes."},
+    {"key":"contrastes","capabilities":["evidence-integrity","contradiction-detection","handoff","effect-verification"],"cadenceHours":3,"publicDescription":"Integridad de pruebas y conversión de hallazgos en actuaciones útiles con documento, utilidad, responsable y siguiente acto."},
+    {"key":"correos","capabilities":["email-evidence","attachment-provenance","deduplication","thread-reconstruction"],"cadenceHours":6,"publicDescription":"Recuperación fiel de hilos, cabeceras, adjuntos y PDF, deduplicación y paquetes probatorios trazables."},
+    {"key":"inss","capabilities":["social-security-law","legal-outreach","proposal-verification","success-fee-search"],"cadenceHours":6,"publicDescription":"Búsqueda y verificación de representación profesional externa para vías INSS, incapacidad, IMV, AEAT y contradicciones administrativas."},
+    {"key":"judicial","capabilities":["judicial-procedure","accessible-filings","receipt-verification","a2a-legal-research"],"cadenceHours":3,"publicDescription":"Impulso de procedimiento judicial, accesibilidad, escritos y resguardos, con carril colegial separado y trazable."},
+    {"key":"material","capabilities":["zero-cost-aid","logistics","delivery-verification","donation-search"],"cadenceHours":3,"publicDescription":"Ayuda material y logística en Xixona a coste total cero mediante vías verificables y entrega comprobada."},
+    {"key":"peritaje","capabilities":["expert-witness","pro-bono-funding","appointment-verification","forensic-search"],"cadenceHours":6,"publicDescription":"Peritaje médico-psiquiátrico independiente con dictamen y ratificación financiados a coste total cero."},
+    {"key":"plazos","capabilities":["deadline-monitoring","official-law","calendar-evidence","a2a-deadline-citations"],"cadenceHours":3,"publicDescription":"Vigilancia de plazos legales con original, recepción, competencia, norma oficial vigente, calendario y alerta material."},
+    {"key":"prensa","capabilities":["media-outreach","evidence-pitches","publication-verification","editorial-discovery"],"cadenceHours":6,"publicDescription":"Aperturas editoriales nacionales con propuestas probatorias personalizadas, seguimiento y verificación de difusión."},
+    {"key":"puertas","capabilities":["human-referrals","foundations","relationship-deduplication","competent-person-routing"],"cadenceHours":6,"publicDescription":"Conexiones humanas con capacidad real de ayuda o derivación, sin presión, ranking ni compromisos personales improcedentes."},
+    {"key":"vivienda","capabilities":["housing-law","legal-outreach","case-separation","habitability-evidence"],"cadenceHours":6,"publicDescription":"Representación civil y de arrendamientos para vivienda, habitabilidad y daños con secuencia probatoria separada de INSS."},
+    {"key":"xixona","capabilities":["social-services","housing-aid","accessible-intake","material-outcome-verification"],"cadenceHours":3,"publicDescription":"Actuación material de Servicios Sociales y vivienda: registro, profesional, valoración accesible, diagnóstico social y medida concreta."}
+  ]
+}
+
