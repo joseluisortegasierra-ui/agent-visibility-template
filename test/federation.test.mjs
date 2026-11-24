@@ -179,3 +179,16 @@ test("mutations reject calls without Owner identity", async () => {
   assert.equal(response.status, 401);
 });
 
+test("GitOps sync is idempotent and accepts no caller-supplied mission", async () => {
+  const runtime = env();
+  const response = await handleRequest(request("/federation/sync", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ mission: "caller supplied and ignored" }),
+  }), runtime);
+  assert.equal(response.status, 200);
+  const body = await response.json();
+  assert.equal(body.reason, "gitops-main-sync");
+  assert.equal(body.changes, 0);
+});
+

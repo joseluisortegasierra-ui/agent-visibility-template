@@ -1282,6 +1282,20 @@ export async function handleRequest(request, env = {}, ctx = {}) {
     try { return json(await storeContribution(env, await readJsonBody(request)), 201); }
     catch (error) { return json({ error: error.message }, error.status || 503); }
   }
+  if (request.method === "POST" && path === "/federation/sync") {
+    try {
+      const gitOps = await syncGitOps(env);
+      const kv = env?.FEDERATION_KV || env?.VISIBILITY_CACHE;
+      const record = {
+        checkedAt: nowIso(),
+        changes: gitOps.owners.changed + gitOps.children.created,
+        reason: "gitops-main-sync",
+        gitOps,
+      };
+      if (kv?.put) await kv.put("a2a:evolution:last", JSON.stringify(record));
+      return json(record);
+    } catch (error) { return json({ error: error.message || "No se pudo sincronizar la configuración GitOps." }, error.status || 503); }
+  }
   const evolveMatch = path.match(/^\/owners\/([a-z0-9-]+)\/evolve$/);
   if (request.method === "POST" && evolveMatch) {
     if (!authorized(request, env)) return json({ error: "Identidad de Owner requerida." }, 401);
