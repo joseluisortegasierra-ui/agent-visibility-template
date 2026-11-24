@@ -1,0 +1,30 @@
+name: A2A green contract
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: node --check src/federation.mjs
+      - run: node --test test/federation.test.mjs
+      - run: node tools/audit-a2a.mjs
+      - name: Verify live preview federation
+        env:
+          JLOSIC_A2A_ORIGIN: https://jlosic-a2a-federation-preview.joseluisortegasierra.workers.dev
+        run: |
+          node -e "Promise.all(['/health','/.well-known/agent-card.json','/.well-known/agents.json?limit=25'].map(async p=>{const r=await fetch(process.env.JLOSIC_A2A_ORIGIN+p);if(!r.ok)throw Error(p+' '+r.status);return [p,await r.json()]})).then(rows=>{const h=rows[0][1],c=rows[1][1],d=rows[2][1],failed=d.sources?.filter(s=>!s.ok)||[];if(h.status!=='ok'||h.owners?.published!==14||c.version!=='1.0.0'||d.count<14||failed.length)throw Error(JSON.stringify({h,c,d,failed}));console.log(JSON.stringify({health:h.status,owners:h.owners.published,card:c.name,directory:d.count,sources:d.sources}))})"
+
