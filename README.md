@@ -51,6 +51,7 @@ Superficies principales:
 - `/owners/{owner}/.well-known/agent-card.json`
 - `/a2a/v1` (JSON-RPC `SendMessage`)
 - `/message:send` (HTTP+JSON)
+- `/federation/sync` (absorbe solo la configuración validada de `main`)
 - `/health`
 - `/llms.txt`
 

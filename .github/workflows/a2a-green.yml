@@ -22,6 +22,12 @@ jobs:
       - run: node --check src/federation.mjs
       - run: node --test test/federation.test.mjs
       - run: node tools/audit-a2a.mjs
+      - name: Sync validated main configuration
+        if: github.event_name != 'pull_request'
+        env:
+          JLOSIC_A2A_ORIGIN: https://jlosic-a2a-federation.joseluisortegasierra.workers.dev
+        run: |
+          node -e "fetch(process.env.JLOSIC_A2A_ORIGIN+'/federation/sync',{method:'POST'}).then(async r=>{if(!r.ok)throw Error('sync '+r.status+' '+await r.text());console.log(JSON.stringify(await r.json()))})"
       - name: Verify live production federation
         env:
           JLOSIC_A2A_ORIGIN: https://jlosic-a2a-federation.joseluisortegasierra.workers.dev
