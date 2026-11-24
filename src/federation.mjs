@@ -522,14 +522,28 @@ export function validateAgentCard(card) {
   return { ok: errors.length === 0, errors, card: sanitized };
 }
 
+async function safeFetch(url, options = {}, maxRedirects = 3) {
+  let current = url;
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
+    if (!isSafePublicUrl(current)) throw new Error("unsafe-url");
+    const response = await fetch(current, { ...options, redirect: "manual" });
+    if (response.status < 300 || response.status >= 400) return response;
+    if (redirects === maxRedirects) throw new Error("too-many-redirects");
+    const location = response.headers.get("location");
+    if (!location) throw new Error(`redirect-${response.status}-without-location`);
+    const next = new URL(location, current).href;
+    if (!isSafePublicUrl(next)) throw new Error("unsafe-redirect");
+    current = next;
+  }
+  throw new Error("redirect-loop");
+}
+
 async function fetchJson(url, timeoutMs = 6_500) {
-  if (!isSafePublicUrl(url)) throw new Error("unsafe-url");
-  const response = await fetch(url, {
+  const response = await safeFetch(url, {
     headers: {
       accept: "application/json, application/a2a+json;q=0.9",
       "user-agent": `JLOSIC-A2A-Federation/${VERSION}`,
     },
-    redirect: "error",
     signal: AbortSignal.timeout(timeoutMs),
   });
   if (!response.ok) throw new Error(`http-${response.status}`);
@@ -904,9 +918,8 @@ async function delegateTask(input, origin) {
   if (!preferred || !isSafePublicUrl(preferred.url)) throw new HttpError(422, "La ficha remota no declara una interfaz utilizable.");
   const rpcId = newId("rpc");
   const messageId = newId("msg");
-  const response = await fetch(preferred.url, {
+  const response = await safeFetch(preferred.url, {
     method: "POST",
-    redirect: "error",
     signal: AbortSignal.timeout(12_000),
     headers: {
       "content-type": "application/json",
@@ -933,7 +946,7 @@ async function delegateTask(input, origin) {
         },
       },
     }),
-  });
+  }, 0);
   const raw = await response.text();
   if (!response.ok) throw new HttpError(502, `El agente remoto respondió HTTP ${response.status}.`);
   if (new TextEncoder().encode(raw).length > MAX_REGISTRY_BYTES) throw new HttpError(502, "La respuesta remota es demasiado grande.");
