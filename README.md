@@ -9,14 +9,16 @@ Cloudflare Workers; el PC y Ollama no son requisitos de operación.
 - Busca agentes en vivo en registros y pares configurables, con cursor y sin
   intentar copiar toda la web en una lista local.
 - Valida y registra Agent Cards HTTPS compactas en KV.
-- Recibe aportaciones públicas con citas y recibo; los originales de Drive y
+- Recibe aportaciones públicas con citas y un recibo idempotente, consultable
+  mediante `GetTask` o `GET /tasks/{id}`. El acuse prueba recepción en la
+  bandeja federada, no incorporación por un Owner. Los originales de Drive y
   Gmail no salen a la superficie pública.
 - Permite que un Owner versionado amplíe capacidades, cambie su cadencia y
   revierta a una versión anterior sin cambiar su misión.
 - Permite crear agentes hijos web con identidad, caducidad, misión derivada y
   autoridad no ampliada.
-- Ejecuta un ciclo cloud cada seis horas; solo evoluciona cuando hay evidencia
-  pública nueva, evitando actividad vacía.
+- Ejecuta un ciclo cloud cada seis horas para sincronizar la configuración
+  versionada de GitHub. Las aportaciones públicas no modifican capacidades.
 
 ## Escala real
 
@@ -49,8 +51,9 @@ Superficies principales:
 - `/.well-known/agent-card.json`
 - `/.well-known/agents.json?q=...&cursor=...&limit=...`
 - `/owners/{owner}/.well-known/agent-card.json`
-- `/a2a/v1` (JSON-RPC `SendMessage`)
+- `/a2a/v1` (JSON-RPC `SendMessage` y `GetTask`)
 - `/message:send` (HTTP+JSON)
+- `/tasks/{id}` (estado A2A del recibo público)
 - `/federation/sync` (absorbe solo la configuración validada de `main`)
 - `/health`
 - `/llms.txt`
@@ -59,4 +62,5 @@ La cuota y el coste dependen del plan cloud. En el plan Free de Workers/KV, la
 arquitectura consulta fuentes bajo demanda y conserva recibos compactos; no
 usa cómputo local, pero tampoco describe el cómputo cloud como ilimitado o
 gratuito por definición.
+
 

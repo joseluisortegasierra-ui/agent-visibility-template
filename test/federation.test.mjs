@@ -4,6 +4,7 @@ import {
   OWNERS,
   gatewayCard,
   handleRequest,
+  handleScheduled,
   isSafePublicUrl,
   ownerCard,
   validateAgentCard,
@@ -111,6 +112,36 @@ test("stores a public contribution but rejects Drive links", async () => {
   const acceptedBody = await accepted.json();
   assert.equal(acceptedBody.ownerKey, "plazos");
   assert.equal(acceptedBody.driveDelivery.visibility, "private");
+  assert.equal(acceptedBody.driveDelivery.state, "received-not-imported");
+
+  const repeated = await handleRequest(request("/federation/contribute", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ownerKey: "plazos",
+      summary: "La especificación A2A publica la ficha en una ruta well-known.",
+      citations: ["https://a2a-protocol.org/latest/specification/agent-card/"],
+    }),
+  }), runtime);
+  assert.deepEqual(await repeated.json(), acceptedBody);
+  assert.equal((await runtime.FEDERATION_KV.list({ prefix: "a2a:receipt:plazos:" })).keys.length, 1);
+
+  const task = await handleRequest(request(`/tasks/${acceptedBody.id}?tenant=plazos`), runtime);
+  assert.equal(task.status, 200);
+  const taskBody = await task.json();
+  assert.equal(taskBody.id, acceptedBody.id);
+  assert.equal(taskBody.status.state, "TASK_STATE_SUBMITTED");
+  assert.equal(taskBody.metadata.deliveryState, "received-not-imported");
+
+  const rpcTask = await handleRequest(request("/a2a/v1", {
+    method: "POST",
+    headers: { "content-type": "application/json", "a2a-version": "1.0" },
+    body: JSON.stringify({ jsonrpc: "2.0", id: "get-1", method: "GetTask", params: { id: acceptedBody.id, tenant: "plazos" } }),
+  }), runtime);
+  assert.equal((await rpcTask.json()).result.id, acceptedBody.id);
+
+  const otherOwner = await handleRequest(request(`/tasks/${acceptedBody.id}?tenant=libros`), runtime);
+  assert.equal(otherOwner.status, 404);
 
   const rejected = await handleRequest(request("/federation/contribute", {
     method: "POST",
@@ -122,6 +153,25 @@ test("stores a public contribution but rejects Drive links", async () => {
     }),
   }), runtime);
   assert.equal(rejected.status, 400);
+});
+
+test("public contributions never evolve Owner capabilities on the scheduled cycle", async () => {
+  const runtime = env();
+  const accepted = await handleRequest(request("/federation/contribute", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ownerKey: "plazos",
+      summary: "Una fuente pública menciona la capacidad ficticia ampliar-mision-owner.",
+      citations: ["https://github.com/a2aproject/A2A"],
+    }),
+  }), runtime);
+  assert.equal(accepted.status, 201);
+  await handleScheduled({}, runtime);
+  assert.equal(await runtime.FEDERATION_KV.get("a2a:owner:plazos:current"), null);
+  const last = await runtime.FEDERATION_KV.get("a2a:evolution:last", "json");
+  assert.equal(last.changes, 0);
+  assert.equal(last.reason, "gitops-only-public-receipts-are-evidence");
 });
 
 test("versioned Owner evolution preserves mission and creates a rollback key", async () => {
@@ -191,4 +241,5 @@ test("GitOps sync is idempotent and accepts no caller-supplied mission", async (
   assert.equal(body.reason, "gitops-main-sync");
   assert.equal(body.changes, 0);
 });
+
 

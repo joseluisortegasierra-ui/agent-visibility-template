@@ -729,8 +729,13 @@ function contributionPayload(input) {
 
 async function storeContribution(env, input) {
   const payload = contributionPayload(input);
+  const id = await sha256Hex(JSON.stringify(payload));
+  const kv = env?.FEDERATION_KV || env?.VISIBILITY_CACHE;
+  if (!kv?.put || !kv?.get) throw new HttpError(503, "La bandeja federada no está enlazada.");
+  const indexKey = `a2a:receipt:id:${id}`;
+  const existing = await kv.get(indexKey, "json");
+  if (existing) return existing;
   const receivedAt = nowIso();
-  const id = await sha256Hex(JSON.stringify({ ...payload, receivedAt }));
   const record = {
     protocol: "jlosic-public-evidence/1.0",
     id,
@@ -739,15 +744,32 @@ async function storeContribution(env, input) {
     driveDelivery: {
       visibility: "private",
       route: "Owner/Panal connector",
-      state: "available-for-private-import",
+      state: "received-not-imported",
     },
   };
-  const kv = env?.FEDERATION_KV || env?.VISIBILITY_CACHE;
-  if (!kv?.put) throw new HttpError(503, "La bandeja federada no está enlazada.");
   await kv.put(`a2a:receipt:${payload.ownerKey}:${receivedAt}:${id}`, JSON.stringify(record), {
     expirationTtl: RECEIPT_TTL_SECONDS,
   });
+  await kv.put(indexKey, JSON.stringify(record), { expirationTtl: RECEIPT_TTL_SECONDS });
   return record;
+}
+
+async function taskForReceipt(env, id, tenant = "") {
+  if (!/^[a-f0-9]{64}$/.test(id || "")) throw new HttpError(400, "Identificador de recibo inválido.");
+  const kv = env?.FEDERATION_KV || env?.VISIBILITY_CACHE;
+  if (!kv?.get) throw new HttpError(503, "La bandeja federada no está enlazada.");
+  const receipt = await kv.get(`a2a:receipt:id:${id}`, "json");
+  if (!receipt || (tenant && tenant !== receipt.ownerKey)) throw new HttpError(404, "Recibo no encontrado.");
+  return {
+    id,
+    contextId: id,
+    status: { state: "TASK_STATE_SUBMITTED", timestamp: receipt.receivedAt },
+    metadata: {
+      ownerKey: receipt.ownerKey,
+      deliveryState: "received-not-imported",
+      note: "El acuse acredita recepción pública; no acredita incorporación por el Owner.",
+    },
+  };
 }
 
 function validCapability(value) {
@@ -1018,7 +1040,7 @@ async function executeSkill(request, env, origin, params) {
   }
   if (["contribute-public-evidence", "aportar", "contribute"].includes(skill)) {
     const receipt = await storeContribution(env, { ...input, ownerKey: input.ownerKey || ownerTenant });
-    return { summary: "Aportación pública recibida con recibo; disponible para importación privada del Owner.", receipt };
+    return { summary: "Aportación pública recibida con recibo; la incorporación por el Owner aún no está acreditada.", receipt };
   }
   if (["delegate-public-task", "delegar"].includes(skill)) {
     if (!authorized(request, env)) throw new HttpError(401, "La delegación requiere identidad de Owner.");
@@ -1049,7 +1071,16 @@ async function handleRpc(request, env, origin) {
   if (rpc?.jsonrpc !== "2.0" || !(typeof id === "string" || Number.isSafeInteger(id))) {
     return rpcError(null, -32600, "Solicitud JSON-RPC inválida.");
   }
-  if (rpc.method !== "SendMessage") return rpcError(id, -32601, "Método disponible: SendMessage.");
+  if (rpc.method === "GetTask") {
+    try {
+      const result = await taskForReceipt(env, rpc.params?.id, rpc.params?.tenant);
+      return json({ jsonrpc: "2.0", id, result });
+    } catch (error) {
+      if (error instanceof HttpError) return rpcError(id, error.status === 404 ? -32001 : -32602, error.message);
+      return rpcError(id, -32603, "Fallo temporal de la federación.", 503);
+    }
+  }
+  if (rpc.method !== "SendMessage") return rpcError(id, -32601, "Métodos disponibles: SendMessage y GetTask.");
   if (rpc.params?.message?.role !== "ROLE_USER" || !Array.isArray(rpc.params?.message?.parts)) {
     return rpcError(id, -32602, "SendMessage requiere un Message ROLE_USER con partes.");
   }
@@ -1186,32 +1217,14 @@ async function syncGitOps(env) {
 
 async function scheduledEvolution(env) {
   const kv = env?.FEDERATION_KV || env?.VISIBILITY_CACHE;
-  if (!kv?.list || !kv?.get || !kv?.put) return { ok: false, reason: "kv-not-bound" };
+  if (!kv?.get || !kv?.put) return { ok: false, reason: "kv-not-bound" };
   const gitOps = await syncGitOps(env);
-  const pending = await kv.list({ prefix: "a2a:receipt:", limit: 100 });
-  if (!pending.keys?.length) {
-    const record = { checkedAt: nowIso(), changes: gitOps.owners.changed + gitOps.children.created, reason: "no-new-public-receipts", gitOps };
-    await kv.put("a2a:evolution:last", JSON.stringify(record));
-    return record;
-  }
-  const receipts = (await Promise.all(pending.keys.slice(0, 100).map((key) => kv.get(key.name, "json")))).filter(Boolean);
-  const byOwner = new Map();
-  for (const receipt of receipts) {
-    if (!ownerByKey(receipt.ownerKey)) continue;
-    if (!byOwner.has(receipt.ownerKey)) byOwner.set(receipt.ownerKey, []);
-    byOwner.get(receipt.ownerKey).push(receipt);
-  }
-  const changes = [];
-  for (const [ownerKey, items] of byOwner) {
-    const capabilities = items.flatMap((item) => item.summary.toLowerCase().match(/[a-z0-9]+(?:-[a-z0-9]+)+/g) || []).filter(validCapability);
-    if (!capabilities.length) continue;
-    const result = await evolveOwner(env, ownerKey, {
-      addCapabilities: [...new Set(capabilities)].slice(0, 3),
-      reason: `Evolución basada en ${items.length} recibo(s) público(s) con citas; la misión no cambia.`,
-    }, "cloud-scheduled-evolution");
-    changes.push({ ownerKey, version: result.manifest.version });
-  }
-  const record = { checkedAt: nowIso(), changes: changes.length + gitOps.owners.changed + gitOps.children.created, owners: changes, gitOps };
+  const record = {
+    checkedAt: nowIso(),
+    changes: gitOps.owners.changed + gitOps.children.created,
+    reason: "gitops-only-public-receipts-are-evidence",
+    gitOps,
+  };
   await kv.put("a2a:evolution:last", JSON.stringify(record));
   return record;
 }
@@ -1270,6 +1283,11 @@ export async function handleRequest(request, env = {}, ctx = {}) {
   }
   if (request.method === "POST" && ["/a2a", "/a2a/v1"].includes(path)) return handleRpc(request, env, origin);
   if (request.method === "POST" && path === "/message:send") return handleRestMessage(request, env, origin);
+  const taskMatch = path.match(/^\/tasks\/([a-f0-9]{64})$/);
+  if (request.method === "GET" && taskMatch) {
+    try { return json(await taskForReceipt(env, taskMatch[1], url.searchParams.get("tenant") || ""), 200, { "content-type": "application/a2a+json; charset=utf-8" }); }
+    catch (error) { return json({ error: error.message }, error.status || 503); }
+  }
 
   if (request.method === "POST" && path === "/federation/register") {
     if (!authorized(request, env)) return json({ error: "Identidad de Owner requerida." }, 401);
@@ -1327,4 +1345,5 @@ export default {
   fetch: handleRequest,
   scheduled: handleScheduled,
 };
+
 
